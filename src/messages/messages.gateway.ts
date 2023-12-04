@@ -4,12 +4,20 @@ import { CreateMessageDto } from './dto/create-message.dto';
 import { UpdateMessageDto } from './dto/update-message.dto';
 import { Server } from 'socket.io'
 import { Socket } from 'socket.io';
+import { UseGuards } from '@nestjs/common';
+import { WsJwtGuard } from 'src/auth/ws-jwt/ws-jwt.guard';
+import { SocketAuthMiddleware } from 'src/auth/ws.mw';
+import * as jwt from 'jsonwebtoken';
 
 @WebSocketGateway({
   cors: {
     origin: '*'
   },
+  // namespace: 'events'
 })
+
+@UseGuards(WsJwtGuard)
+
 export class MessagesGateway {
 
   @WebSocketServer()
@@ -20,7 +28,6 @@ export class MessagesGateway {
   async create(@MessageBody() createMessageDto: CreateMessageDto) {
 
     const newMessage = await this.messagesService.create(createMessageDto);
-    console.log("New messagecreated..........", newMessage)
     this.server.emit('message', newMessage);
     return newMessage;
   }
@@ -50,6 +57,8 @@ export class MessagesGateway {
 
   async handleConnection(@ConnectedSocket() client: Socket) {
     console.log("Handshake from client query.... ", client.handshake.query);
+    // let tempToken = jwt.sign({socketId: client.id}, "secretKey"); 
+    // console.log("Temp token::::::::::::::::::::", tempToken);
     let { username, userid } = client.handshake.query
     username = username + "";
     userid = userid + "";
@@ -67,6 +76,18 @@ export class MessagesGateway {
       this.server.to(receiverId).emit('receivePvtMsg', newPvtMessage);
     }
     return newPvtMessage;
+  }
+
+
+  //------------Authorization----
+
+  afterInit(client: Socket) {
+    console.log("In afterInit()......")
+    client.use((req, next) => {
+      SocketAuthMiddleware() as any
+    });
+
+    console.log("afterInit()");
   }
 
 
